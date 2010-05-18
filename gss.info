@@ -1,0 +1,4 @@
+; $Id$
+name = Google Site Search
+description = Provides integration with Google Site Search.
+core = 6.x

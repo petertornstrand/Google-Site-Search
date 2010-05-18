@@ -1,0 +1,194 @@
+<?php
+// $Id$
+
+/**
+ * Implementation of hook_menu().
+ */
+function gss_menu() {
+  $items = array();
+  
+  $items['admin/settings/google-site-search'] = array(
+    'title' => 'Google Site Search',
+    'description' => 'Google Site Search settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('gss_settings'),
+    'access arguments' => array('administer site settings'),
+  );
+  
+  $items['google-search'] = array(
+    'title' => 'Search',
+    'page callback' => 'gss_search_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  
+  $items['google-search/%'] = array(
+    'title' => 'Search results',
+    'page callback' => 'gss_search_results',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  
+  return $items;
+}
+
+/**
+ * Module settings.
+ */
+function gss_settings() {
+  $form = array();
+  
+  $form['gss_api_key'] = array(
+    '#title' => t('API Key'),
+    '#type' => 'textfield',
+    '#description' => t('Your Google Site Search API key.'),
+    '#default_value' => variable_get('gss_api_key', ''),
+    '#required' => TRUE,
+  );
+  
+  $form['gss_page_size'] = array(
+    '#title' => t('Page size'),
+    '#type' => 'textfield',
+    '#description' => t('Number of results to display per page.'),
+    '#default_value' => variable_get('gss_page_size', 25),
+    '#size' => 5,
+    '#max_length' => 5,
+  );
+  
+  return system_settings_form($form);
+}
+
+/**
+ * Implementation of hook_block().
+ */
+function gss_block($op = 'list', $delta = 0, $edit = array()) {
+  if ($op == 'list') {
+    $blocks[0] = array(
+      'info' => t('Google Site Search'),
+      'weight' => 0,
+      'status' => 0,
+    );
+
+    return $blocks;
+  }
+  else if ($op == 'view') {
+    $block = array(
+      'subject' => t('Search'),
+      'content' => drupal_get_form('gss_search_form'),
+    );
+
+    return $block;
+  }
+}
+
+/**
+ * Search form.
+ */
+function gss_search_form() {
+  $form = array();
+  
+  $form['query'] = array(
+    '#title' => t('Keywords'),
+    '#description' => t('Enter search keywords.'),
+    '#type' => 'textfield',
+  );
+  
+  $form['submit'] = array(
+    '#value' => t('Search'),
+    '#type' => 'submit',
+  );
+  
+  $form['#submit'][] = 'gss_search_form_submit';
+  
+  return $form;
+}
+
+/**
+ * Submit handler.
+ */
+function gss_search_form_submit($form, &$form_state) {
+  drupal_goto('google-search/'. check_plain($form_state['values']['query']));
+}
+
+/**
+ * Search page.
+ */
+function gss_search_page() {
+  return drupal_get_form('gss_search_form');
+}
+
+/**
+ * Search results page.
+ */
+function gss_search_results($query) {
+  // Include dependencies.
+  module_load_include('inc', 'gss', 'includes/GoogleSiteSearch');
+  
+  // Make query safe.
+  $query = check_plain($query);
+  
+  // Init GoogleSiteSearch object.
+  $gss = new GoogleSiteSearch($query, variable_get('gss_api_key', ''));
+  
+  // Get current page.
+  $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+
+  // Init results variable.
+  $results = null;
+
+  // Perform search.
+  try {
+  	$results = $gss->GetSearchResults($page);
+  }
+  catch(Exception $e) {
+  	watchdog('gss', $e, NULL, WATCHDOG_ERROR);
+  	drupal_set_message(t('Sorry, the search function is unavailable at this time.'));
+  	exit();
+  }
+  
+  // Get search summary.
+  $total_results = $gss->GetTotalResults();
+  $end_pos = $gss->GetCurrentPage() * $gss->GetPageSize();
+  $start_pos = $end_pos - $gss->GetPageSize() + 1;
+  
+  if ($end_pos > $total_results) {
+    $end_pos = $total_results;
+  }
+    	
+  // Build output.
+  $output .= '<p>';
+  $output .= t('Displaying results !start - !end of about !total searching for <strong>!query</strong>.', array('!start' => $start_pos, '!end' => $end_pos, '!total' => $total_results, '!query' => $query));
+  $output .= '</p>';
+  $output .= '<dl class="gss-results">';
+  
+  // Loop results.
+  foreach ($results as $result) {
+    $url = urldecode($result['url']);
+    $class = _gss_get_link_class($result);
+    $output .= '<dt>'. l($result['title'], $url, array('attributes' => array('class' => $class), 'html' => TRUE)) .'</dt>';
+    $output .= '<dd>'. $result['description'] .'</dd>';
+  }
+  
+  $output .= '</dl>';
+  
+  // Get pager.
+  $output .= $gss->GetPager();
+  
+  return $output;
+}
+
+/**
+ * Get class names for result item.
+ */
+function _gss_get_link_class($result) {
+  $file_types = array('pdf', 'doc', 'docx', 'ppt', 'pptx', 'odt');
+  $file = basename($result['url']);
+  $ext = drupal_strtolower(substr($file, strrpos($file, '.') + 1));
+  if (in_array($ext, $file_types)) {
+    return 'filetype-'. $ext;
+  }
+  else {
+    return 'filetype-page';
+  }
+}
