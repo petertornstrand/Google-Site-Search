@@ -157,20 +157,25 @@ function gss_search_results($query) {
   }
     	
   // Build output.
-  $output .= '<p>';
-  $output .= t('Displaying results !start - !end of about !total searching for <strong>!query</strong>.', array('!start' => $start_pos, '!end' => $end_pos, '!total' => $total_results, '!query' => $query));
-  $output .= '</p>';
-  $output .= '<dl class="gss-results">';
+  if (!empty($results)) {
+    $output = '<p>';
+    $output .= t('Displaying results !start - !end of about !total searching for <strong>!query</strong>.', array('!start' => $start_pos, '!end' => $end_pos, '!total' => $total_results, '!query' => $query));
+    $output .= '</p>';
+    $output .= '<dl class="gss-results">';
   
-  // Loop results.
-  foreach ($results as $result) {
-    $url = urldecode($result['url']);
-    $class = _gss_get_link_class($result);
-    $output .= '<dt>'. l($result['title'], $url, array('attributes' => array('class' => $class), 'html' => TRUE)) .'</dt>';
-    $output .= '<dd>'. $result['description'] .'</dd>';
+    // Loop results.
+    foreach ($results as $result) {
+      $url = urldecode($result['url']);
+      $class = _gss_get_link_class($result);
+      $output .= '<dt>'. l($result['title'], $url, array('attributes' => array('class' => $class), 'html' => TRUE)) .'</dt>';
+      $output .= '<dd>'. $result['description'] .'</dd>';
+    }
+    
+    $output .= '</dl>';
   }
-  
-  $output .= '</dl>';
+  else {
+    $output = '<p>'. t('No results.') .'</p>';
+  }
   
   // Get pager.
   $output .= $gss->GetPager();
